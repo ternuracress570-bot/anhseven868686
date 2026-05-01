@@ -1,1 +1,5 @@
 node_modules
+android/.gradle/
+softphone/android/.gradle/
+android/app/build/
+softphone/android/app/build/

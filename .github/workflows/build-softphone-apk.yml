@@ -58,7 +58,7 @@ jobs:
           tail -80 /tmp/gradle-softphone.log
           exit $BUILD_EXIT
         env:
-          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+          GRADLE_OPTS: "-Xmx4096m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8 -Dorg.gradle.internal.http.connectionTimeout=120000 -Dorg.gradle.internal.http.socketTimeout=120000"
           JAVA_TOOL_OPTIONS: "-Dfile.encoding=UTF-8"
 
       - name: Upload Build Log
