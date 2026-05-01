@@ -24,8 +24,9 @@ public class MainActivity extends ReactActivity {
 
         SharedPreferences prefs = getSharedPreferences("sip_config", MODE_PRIVATE);
         String host = prefs.getString("host", "");
-        String user = prefs.getString("username", "");
-        String pass = prefs.getString("password", "");
+        // Support both legacy single-SIP keys and newer dual-SIP keys.
+        String user = prefs.getString("username_sim1", prefs.getString("username", ""));
+        String pass = prefs.getString("password_sim1", prefs.getString("password", ""));
         if (host != null && !host.trim().isEmpty()
                 && user != null && !user.trim().isEmpty()
                 && pass != null && !pass.trim().isEmpty()) {

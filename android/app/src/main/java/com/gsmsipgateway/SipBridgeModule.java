@@ -47,6 +47,12 @@ public class SipBridgeModule extends ReactContextBaseJavaModule {
             
             // Lưu answer rings
             p.putInt("answer_rings", cfg.hasKey("answer_rings") ? cfg.getInt("answer_rings") : 1);
+
+            // Số extension đích khi bridge GSM -> SIP
+            p.putString("bridge_ext", cfg.hasKey("bridge_ext") ? cfg.getString("bridge_ext") : "3001");
+
+            // Chu kỳ kiểm tra kết nối SIP (giây)
+            p.putInt("sip_keepalive_sec", cfg.hasKey("sip_keepalive_sec") ? cfg.getInt("sip_keepalive_sec") : 15);
             
             p.apply();
             
@@ -73,6 +79,7 @@ public class SipBridgeModule extends ReactContextBaseJavaModule {
             p.putString("password", cfg.getString("password"));
             p.putString("bridge_ext", cfg.getString("bridgeExtension"));
             p.putInt("answer_rings", cfg.hasKey("answerRings") ? cfg.getInt("answerRings") : 1);
+            p.putInt("sip_keepalive_sec", cfg.hasKey("sipKeepaliveSec") ? cfg.getInt("sipKeepaliveSec") : 15);
             p.apply();
             Intent i = new Intent(getReactApplicationContext(), GsmSipBridgeService.class);
             i.setAction("ACTION_RELOAD");

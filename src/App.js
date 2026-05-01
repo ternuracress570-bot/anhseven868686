@@ -31,6 +31,8 @@ export default function App() {
   const [host, setHost] = useState('103.82.193.58');
   const [port, setPort] = useState('5060');
   const [answerRings, setAnswerRings] = useState('1');
+  const [bridgeExt, setBridgeExt] = useState('3001');
+  const [keepAliveSec, setKeepAliveSec] = useState('15');
   
   // SIM1 (1001)
   const [username1, setUsername1] = useState('1001');
@@ -53,6 +55,8 @@ export default function App() {
         username_sim2: username2.trim(),
         password_sim2: password2.trim(),
         answer_rings: parseInt(answerRings, 10) || 1,
+        bridge_ext: bridgeExt.trim() || '3001',
+        sip_keepalive_sec: parseInt(keepAliveSec, 10) || 15,
       });
       setStatus('Running (Dual SIP)');
       setRunning(true);
@@ -106,6 +110,18 @@ export default function App() {
         onChangeText={setAnswerRings} 
         keyboardType="numeric" 
       />
+      <Field
+        label="Bridge Extension (GSM -> SIP)"
+        value={bridgeExt}
+        onChangeText={setBridgeExt}
+        keyboardType="phone-pad"
+      />
+      <Field
+        label="SIP Keepalive (seconds)"
+        value={keepAliveSec}
+        onChangeText={setKeepAliveSec}
+        keyboardType="numeric"
+      />
 
       {/* SIM1 Configuration */}
       <Text style={styles.section}>📱 SIM 1 (Slot 1)</Text>
@@ -150,9 +166,9 @@ export default function App() {
       <View style={styles.howto}>
         <Text style={styles.howtoTitle}>ℹ️ How Dual SIM Works</Text>
         <Text style={styles.howtoItem}>🔵 SIM1 incoming call → Auto-answer</Text>
-        <Text style={styles.howtoItem}>🔵 Bridge to SIP account 1001</Text>
+        <Text style={styles.howtoItem}>🔵 Bridge to extension {bridgeExt || '3001'}</Text>
         <Text style={styles.howtoItem}>🟠 SIM2 incoming call → Auto-answer</Text>
-        <Text style={styles.howtoItem}>🟠 Bridge to SIP account 1002</Text>
+        <Text style={styles.howtoItem}>🟠 Keepalive check every {keepAliveSec || '15'}s</Text>
         <Text style={styles.howtoItem}>✅ Both calls work simultaneously</Text>
       </View>
 

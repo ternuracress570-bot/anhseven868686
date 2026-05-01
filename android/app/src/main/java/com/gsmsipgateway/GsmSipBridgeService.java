@@ -26,7 +26,7 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     private static final String CH = "gsm_sip_bridge";
     private static final int RING_INTERVAL_MS = 5000;
     private static final int MAX_SIP_RETRIES = Integer.MAX_VALUE;
-    private static final int SIP_HEALTH_CHECK_INTERVAL_MS = 15000;
+    private static final int SIP_HEALTH_CHECK_INTERVAL_MS_DEFAULT = 15000;
 
     private Core core;
     private SipAccountManager sipMgr;
@@ -43,6 +43,7 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     private Runnable reRegisterRunnable;
     private Runnable iterateRunnable;
     private Runnable healthCheckRunnable;
+    private int sipHealthCheckIntervalMs = SIP_HEALTH_CHECK_INTERVAL_MS_DEFAULT;
     private static final int CORE_ITERATE_INTERVAL_MS = 20;
 
     @Override
@@ -91,14 +92,14 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
             @Override
             public void run() {
                 runSipHealthCheck();
-                handler.postDelayed(this, SIP_HEALTH_CHECK_INTERVAL_MS);
+                handler.postDelayed(this, sipHealthCheckIntervalMs);
             }
         };
 
         startForeground(1, note("Initializing..."));
         registerNetworkCallback();
         reloadAccounts();
-        handler.postDelayed(healthCheckRunnable, SIP_HEALTH_CHECK_INTERVAL_MS);
+        handler.postDelayed(healthCheckRunnable, sipHealthCheckIntervalMs);
     }
 
     private void registerNetworkCallback() {
@@ -134,14 +135,22 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
         SharedPreferences p = getSharedPreferences("sip_config", MODE_PRIVATE);
         String host = p.getString("host", "103.82.193.58");
         int port = p.getInt("port", 5060);
+        String bridgeExt = p.getString("bridge_ext", "3001");
+        if (bridgeExt == null || bridgeExt.trim().isEmpty()) {
+            bridgeExt = "3001";
+        }
+
+        int keepAliveSec = p.getInt("sip_keepalive_sec", 15);
+        keepAliveSec = Math.max(8, Math.min(60, keepAliveSec));
+        sipHealthCheckIntervalMs = keepAliveSec * 1000;
 
         String user1 = p.getString("username_sim1", "1001");
         String pass1 = p.getString("password_sim1", "abc12123");
-        sipMgr.configureAccount(SipAccountManager.ACCOUNT_SIM1, host, port, user1, pass1, user1);
+        sipMgr.configureAccount(SipAccountManager.ACCOUNT_SIM1, host, port, user1, pass1, bridgeExt);
 
         String user2 = p.getString("username_sim2", "1002");
         String pass2 = p.getString("password_sim2", "abc12123");
-        sipMgr.configureAccount(SipAccountManager.ACCOUNT_SIM2, host, port, user2, pass2, user2);
+        sipMgr.configureAccount(SipAccountManager.ACCOUNT_SIM2, host, port, user2, pass2, bridgeExt);
 
         for (int i = 0; i < 2; i++) {
             bridgeInProgress[i] = false;
@@ -153,7 +162,13 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
 
         sipMgr.registerAll();
         updateNote("Registering SIP accounts...");
-        Log.d(TAG, "Reloaded accounts: " + user1 + " & " + user2 + " @ " + host + ":" + port);
+        Log.d(TAG, "Reloaded accounts: " + user1 + " & " + user2 + " @ " + host + ":" + port
+            + " | bridge_ext=" + bridgeExt + " | keepalive=" + keepAliveSec + "s");
+
+        if (healthCheckRunnable != null) {
+            handler.removeCallbacks(healthCheckRunnable);
+            handler.postDelayed(healthCheckRunnable, sipHealthCheckIntervalMs);
+        }
     }
 
     @Override
