@@ -340,16 +340,21 @@ public class SipAccountManager {
             }
         }
 
-        // Incoming calls may not be tracked yet, map by account.
+        // Incoming calls may not be tracked yet; map by called SIP username.
         if (simSlot == -1 && call != null) {
-            Account callAccount = call.getAccount();
-            if (callAccount != null) {
-                for (SipAccount sipAcc : accounts.values()) {
-                    if (sipAcc.account == callAccount) {
-                        simSlot = sipAcc.simSlot;
-                        break;
+            try {
+                Address toAddress = call.getToAddress();
+                String toUser = toAddress != null ? toAddress.getUsername() : null;
+                if (toUser != null) {
+                    for (SipAccount sipAcc : accounts.values()) {
+                        if (toUser.equals(sipAcc.username)) {
+                            simSlot = sipAcc.simSlot;
+                            break;
+                        }
                     }
                 }
+            } catch (Exception e) {
+                Log.w(TAG, "handleCallStateChanged: unable to map call by username: " + e.getMessage());
             }
         }
 
@@ -438,13 +443,9 @@ public class SipAccountManager {
             }
             Log.i(TAG, "[RTP] STATS slot=" + slot
                 + " iceState=" + stats.getIceState()
-                + " sndPayload=" + stats.getSenderPayloadType()
-                + " rcvPayload=" + stats.getReceiverPayloadType()
                 + " jitter=" + String.format("%.1f", stats.getJitterBufferSizeMs()) + "ms"
                 + " lostSnd=" + String.format("%.1f%%", stats.getSenderLossRate())
-                + " lostRcv=" + String.format("%.1f%%", stats.getReceiverLossRate())
-                + " localAddr=" + stats.getLocalAddress()
-                + " remoteAddr=" + stats.getRemoteAddress());
+                + " lostRcv=" + String.format("%.1f%%", stats.getReceiverLossRate()));
         } catch (Exception e) {
             Log.w(TAG, "[RTP] logAudioStats error: " + e.getMessage());
         }
