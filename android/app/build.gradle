@@ -1,0 +1,58 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+react {
+    root = file("../..")
+    reactNativeDir = file("../../node_modules/react-native")
+    codegenDir = file("../../node_modules/@react-native/codegen")
+    cliFile = file("../../node_modules/react-native/cli.js")
+    entryFile = file("../../index.js")
+    hermesCommand = file("../../node_modules/react-native/sdks/hermesc/%OS-BIN%/hermesc").absolutePath
+}
+
+def enableProguardInReleaseBuilds = false
+def jscFlavor = 'org.webkit:android-jsc:+'
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.gsmsipgateway"
+
+    defaultConfig {
+        applicationId "com.gsmsipgateway"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+dependencies {
+    implementation("com.facebook.react:react-android")
+    implementation("com.facebook.react:flipper-integration")
+    implementation("org.linphone:linphone-sdk-android:5.3.99")
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+
+    if (hermesEnabled.toBoolean()) {
+        implementation("com.facebook.react:hermes-android")
+    } else {
+        implementation jscFlavor
+    }
+}
+
+apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle")
+applyNativeModulesAppBuildGradle(project)

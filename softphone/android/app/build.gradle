@@ -110,6 +110,7 @@ dependencies {
 
     // Linphone SDK for SIP functionality
     implementation("org.linphone:linphone-sdk-android:5.3.99")
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

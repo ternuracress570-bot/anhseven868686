@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, master]
     paths:
+      - 'package.json'
+      - 'package-lock.json'
       - 'softphone/**'
       - '.github/workflows/build-softphone-apk.yml'
   workflow_dispatch:
@@ -13,137 +15,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: source
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-
-      - name: Init React Native project
-        run: npx react-native@0.73.6 init SipPhoneApp --version 0.73.6 --skip-install
+          cache: 'gradle'
 
       - name: Install dependencies
-        run: |
-          cd $GITHUB_WORKSPACE/SipPhoneApp
-          npm install --legacy-peer-deps
-
-      - name: Replace template Java/Kotlin with our source files
-        run: |
-          APP=$GITHUB_WORKSPACE/SipPhoneApp
-          SRC=$GITHUB_WORKSPACE/source/softphone
-          KTDIR=$APP/android/app/src/main/java
-
-          # Delete ALL template-generated .kt and .java files to avoid duplicates
-          find $KTDIR -name "*.kt" -delete
-          find $KTDIR -name "*.java" -delete
-          echo "Deleted all template source files"
-
-          # Copy our Java files into correct package dir
-          PKG=$KTDIR/com/sipphone1001
-          mkdir -p $PKG
-          cp $SRC/android/app/src/main/java/com/sipphone1001/*.java $PKG/
-          echo "=== Our Java files ==="
-          ls -la $PKG/
-
-          # JS files
-          mkdir -p $APP/src
-          cp $SRC/src/App.js $APP/src/App.js
-          cp $SRC/index.js $APP/index.js
-          cp $SRC/app.json $APP/app.json
-
-          # AndroidManifest
-          cp $SRC/android/app/src/main/AndroidManifest.xml \
-             $APP/android/app/src/main/AndroidManifest.xml
-
-          # res/values
-          mkdir -p $APP/android/app/src/main/res/values
-          cp $SRC/android/app/src/main/res/values/strings.xml \
-             $APP/android/app/src/main/res/values/strings.xml
-          cp $SRC/android/app/src/main/res/values/styles.xml \
-             $APP/android/app/src/main/res/values/styles.xml
-
-          cp $SRC/android/app/proguard-rules.pro $APP/android/app/proguard-rules.pro
-
-      - name: Patch gradle files
-        run: |
-          APP=$GITHUB_WORKSPACE/SipPhoneApp
-          BFILE=$APP/android/app/build.gradle
-
-          # Patch namespace and applicationId
-          sed -i 's/namespace \"com\.sipphoneapp\"/namespace \"com.sipphone1001\"/' $BFILE
-          sed -i 's/applicationId \"com\.sipphoneapp\"/applicationId \"com.sipphone1001\"/' $BFILE
-          sed -i 's/namespace \"com\.SipPhoneApp\"/namespace \"com.sipphone1001\"/' $BFILE
-          sed -i 's/applicationId \"com\.SipPhoneApp\"/applicationId \"com.sipphone1001\"/' $BFILE
-          # Fallback: replace any remaining template namespace/applicationId
-          sed -i 's/namespace \"com\.[a-z]*\"/namespace \"com.sipphone1001\"/' $BFILE
-          sed -i 's/applicationId \"com\.[a-z]*\"/applicationId \"com.sipphone1001\"/' $BFILE
-
-          # Force app minSdk to 26 regardless of template defaults/root ext values.
-          sed -E -i 's/minSdkVersion\s*=\s*[0-9]+/minSdkVersion = 26/g' $BFILE
-          sed -E -i 's/minSdkVersion\s+[0-9]+/minSdkVersion 26/g' $BFILE
-          sed -i 's/minSdkVersion rootProject.ext.minSdkVersion/minSdkVersion 26/g' $BFILE
-
-          sed -i '/buildTypes {/i\    signingConfigs {\n        release {\n            storeFile file(\"keystore\/release.keystore\")\n            storePassword \"android123\"\n            keyAlias \"release\"\n            keyPassword \"android123\"\n        }\n    }\n' $BFILE
-          if grep -q 'signingConfig signingConfigs\.debug' $BFILE; then
-            sed -i 's/signingConfig signingConfigs\.debug/signingConfig signingConfigs.release/' $BFILE
-          else
-            sed -i '/release {/a\            signingConfig signingConfigs.release' $BFILE
-          fi
-
-          # Add required dependencies inside existing dependencies block (avoid duplicate blocks)
-          if ! grep -q 'org.linphone:linphone-sdk-android:5.3.5' $BFILE; then
-            sed -i '/dependencies {/a\    implementation "org.linphone:linphone-sdk-android:5.3.5"\n    implementation "androidx.localbroadcastmanager:localbroadcastmanager:1.1.0"' $BFILE
-          fi
-
-          # Fix PREFER_SETTINGS -> PREFER_PROJECT
-          SETTINGS=$APP/android/settings.gradle
-          sed -i 's/RepositoriesMode\.PREFER_SETTINGS/RepositoriesMode.PREFER_PROJECT/g' $SETTINGS
-
-          # Inject Linphone repo into settings.gradle
-          sed -i '/google()/a\        maven { url "https://linphone.org/maven_repository/" }\n        maven { url "https://download.linphone.org/maven_repository/" }' $SETTINGS || echo "sed patch skipped"
-
-          # Add Linphone repo to TOP-LEVEL android/build.gradle allprojects block
-          ROOT_BUILD=$APP/android/build.gradle
-          printf '\nallprojects {\n    repositories {\n        maven { url "https://linphone.org/maven_repository/" }\n        maven { url "https://download.linphone.org/maven_repository/" }\n    }\n}\n' >> $ROOT_BUILD
-
-          # Fix minSdkVersion in root build.gradle
-          sed -E -i 's/minSdkVersion\s*=\s*[0-9]+/minSdkVersion = 26/g' $ROOT_BUILD
-          sed -E -i 's/minSdkVersion\s+[0-9]+/minSdkVersion 26/g' $ROOT_BUILD
-
-          # Keep template gradle-wrapper and gradle.properties from RN init to avoid AGP/Gradle mismatch
-          # Only enforce the options we need.
-          if ! grep -q '^newArchEnabled=false' $APP/android/gradle.properties; then
-            printf '\nnewArchEnabled=false\n' >> $APP/android/gradle.properties
-          fi
-          if ! grep -q '^hermesEnabled=true' $APP/android/gradle.properties; then
-            printf 'hermesEnabled=true\n' >> $APP/android/gradle.properties
-          fi
-
-          echo "=== app/build.gradle ==="
-          cat $BFILE
-          echo '## app/build.gradle after patch' >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          cat $BFILE >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-
-      - name: Generate Keystore
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/SipPhoneApp/android/app/keystore
-          keytool -genkeypair -v \
-            -keystore $GITHUB_WORKSPACE/SipPhoneApp/android/app/keystore/release.keystore \
-            -alias release -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android123 -keypass android123 \
-            -dname "CN=SipPhone1001,OU=Dev,O=Dev,L=HCM,ST=HCM,C=VN"
+        run: npm ci --legacy-peer-deps
 
       - name: Build Release APK
         run: |
-          cd $GITHUB_WORKSPACE/SipPhoneApp/android
+          cd $GITHUB_WORKSPACE/softphone/android
           chmod +x gradlew
           set +e
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee /tmp/gradle-softphone.log
@@ -175,5 +65,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SipPhone1001-release
-          path: SipPhoneApp/android/app/build/outputs/apk/release/app-release.apk
+          path: softphone/android/app/build/outputs/apk/release/app-release.apk
           retention-days: 7

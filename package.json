@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
-    "build-release": "cd android && ./gradlew assembleRelease"
+    "build-release": "node -e \"const {spawnSync}=require('node:child_process'); const cmd=process.platform==='win32'?'gradlew.bat':'./gradlew'; const result=spawnSync(cmd,['assembleRelease'],{cwd:'android',stdio:'inherit',shell:process.platform==='win32'}); process.exit(result.status ?? 1);\""
   },
   "dependencies": {
     "react": "18.2.0",
