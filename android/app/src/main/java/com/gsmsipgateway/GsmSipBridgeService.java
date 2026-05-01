@@ -168,6 +168,13 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
                 }
                 case "ACTION_CALL_ENDED": {
                     Log.d(TAG, "Call ended on SIM slot " + simSlot);
+                    SipAccountManager.SipAccount acc = sipMgr != null ? sipMgr.getAccount(simSlot) : null;
+                    boolean hasSipCall = acc != null && acc.currentCall != null;
+                    if (!bridgeInProgress[simSlot] && !hasSipCall) {
+                        Log.d(TAG, "Ignoring ACTION_CALL_ENDED for slot " + simSlot + " (no active bridge/call)");
+                        break;
+                    }
+
                     handler.removeCallbacks(answerRunnables[simSlot]);
                     handler.removeCallbacks(bridgeRunnables[simSlot]);
                     bridgeInProgress[simSlot] = false;
@@ -291,7 +298,8 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     @Override
     public void onIncomingCall(int simSlot, Call call, String dialedNumber) {
         Log.d(TAG, "Incoming SIP from Asterisk: slot=" + simSlot + " number=" + dialedNumber);
-        if (dialedNumber == null || dialedNumber.trim().isEmpty()) {
+        String normalizedNumber = normalizeVietnamPhone(dialedNumber);
+        if (normalizedNumber.isEmpty()) {
             Log.e(TAG, "onIncomingCall: no number, ignoring");
             return;
         }
@@ -300,17 +308,38 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
             sipMgr.answerCall(simSlot);
         }
 
-        updateNote("SIM" + (simSlot + 1) + " Outbound GSM: " + dialedNumber);
+        updateNote("SIM" + (simSlot + 1) + " Outbound GSM: " + normalizedNumber);
         prepareAudio();
         try {
             Intent intent = new Intent(Intent.ACTION_CALL);
-            intent.setData(Uri.parse("tel:" + dialedNumber.trim()));
+            intent.setData(Uri.parse("tel:" + normalizedNumber));
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
-            Log.d(TAG, "GSM outbound call initiated: " + dialedNumber);
+            Log.d(TAG, "GSM outbound call initiated: " + normalizedNumber);
         } catch (Exception e) {
             Log.e(TAG, "Failed to initiate GSM outbound call: " + e.getMessage());
         }
+    }
+
+    private String normalizeVietnamPhone(String raw) {
+        if (raw == null) return "";
+        String clean = raw.trim().replaceAll("[^0-9+]", "");
+        if (clean.isEmpty()) return "";
+
+        if (clean.startsWith("+84") && clean.length() > 3) {
+            clean = "0" + clean.substring(3);
+        } else if (clean.startsWith("84") && clean.length() >= 11) {
+            clean = "0" + clean.substring(2);
+        }
+
+        if (!clean.startsWith("0") && clean.matches("[35789]\\d{8,9}")) {
+            clean = "0" + clean;
+        }
+
+        if (!clean.matches("0\\d{8,10}")) {
+            return "";
+        }
+        return clean;
     }
 
     private void prepareAudio() {

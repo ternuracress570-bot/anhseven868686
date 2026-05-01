@@ -17,6 +17,8 @@ import org.linphone.core.TransportType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Quản lý 2 tài khoản SIP cho Dual SIM
@@ -25,6 +27,7 @@ import java.util.Map;
  */
 public class SipAccountManager {
     private static final String TAG = "SipAccountMgr";
+    private static final Pattern PHONE_LIKE_PATTERN = Pattern.compile("(\\+?\\d[\\d\\s().-]{7,})");
     
     public static final int ACCOUNT_SIM1 = 0; // SIP 1001
     public static final int ACCOUNT_SIM2 = 1; // SIP 1002
@@ -369,16 +372,7 @@ public class SipAccountManager {
         switch (state) {
             case IncomingReceived:
                 sipAcc.currentCall = call;
-                String dialedNumber = "";
-                try {
-                    Address toAddr = call.getToAddress();
-                    if (toAddr != null) dialedNumber = toAddr.getUsername();
-                    if (dialedNumber == null || dialedNumber.isEmpty()) {
-                        dialedNumber = call.getRemoteAddress().getUsername();
-                    }
-                } catch (Exception e) {
-                    Log.w(TAG, "Error getting dialed number: " + e.getMessage());
-                }
+                String dialedNumber = extractDialedNumber(call);
                 Log.i(TAG, "[RTP] INCOMING slot=" + simSlot
                     + " from=" + call.getRemoteAddress().asString()
                     + " to=" + dialedNumber);
@@ -409,6 +403,64 @@ public class SipAccountManager {
             default:
                 break;
         }
+    }
+
+    private String extractDialedNumber(Call call) {
+        if (call == null) return "";
+
+        String[] candidates = new String[6];
+        try {
+            Address toAddr = call.getToAddress();
+            candidates[0] = toAddr != null ? toAddr.getUsername() : null;
+            candidates[1] = toAddr != null ? toAddr.getDisplayName() : null;
+            candidates[2] = toAddr != null ? toAddr.asStringUriOnly() : null;
+        } catch (Exception ignored) {
+        }
+
+        try {
+            Address remoteAddr = call.getRemoteAddress();
+            candidates[3] = remoteAddr != null ? remoteAddr.getUsername() : null;
+            candidates[4] = remoteAddr != null ? remoteAddr.getDisplayName() : null;
+            candidates[5] = remoteAddr != null ? remoteAddr.asStringUriOnly() : null;
+        } catch (Exception ignored) {
+        }
+
+        for (String candidate : candidates) {
+            String normalized = normalizeVietnamPhone(candidate);
+            if (!normalized.isEmpty()) {
+                return normalized;
+            }
+        }
+        return "";
+    }
+
+    private String normalizeVietnamPhone(String raw) {
+        if (raw == null) return "";
+        String input = raw.trim();
+        if (input.isEmpty()) return "";
+
+        Matcher m = PHONE_LIKE_PATTERN.matcher(input);
+        if (m.find()) {
+            input = m.group(1);
+        }
+
+        String clean = input.replaceAll("[^0-9+]", "");
+        if (clean.isEmpty()) return "";
+
+        if (clean.startsWith("+84") && clean.length() > 3) {
+            clean = "0" + clean.substring(3);
+        } else if (clean.startsWith("84") && clean.length() >= 11) {
+            clean = "0" + clean.substring(2);
+        }
+
+        if (!clean.startsWith("0") && clean.matches("[35789]\\d{8,9}")) {
+            clean = "0" + clean;
+        }
+
+        if (!clean.matches("0\\d{8,10}")) {
+            return "";
+        }
+        return clean;
     }
 
     /** Log codec đã negotiate tại thời điểm SDP */

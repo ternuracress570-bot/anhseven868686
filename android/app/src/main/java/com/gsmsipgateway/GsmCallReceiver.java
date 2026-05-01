@@ -6,9 +6,12 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import java.util.HashMap;
+import java.util.Map;
 
 public class GsmCallReceiver extends BroadcastReceiver {
     private static final String TAG = "GsmCallReceiver";
+    private static final Map<Integer, String> LAST_STATE_BY_SLOT = new HashMap<>();
     
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -25,13 +28,23 @@ public class GsmCallReceiver extends BroadcastReceiver {
             si.putExtra("sim_slot", simSlot);
             Log.d(TAG, "Incoming call from " + number + " on SIM slot " + simSlot);
             context.startForegroundService(si);
+        } else if (TelephonyManager.EXTRA_STATE_OFFHOOK.equals(state)) {
+            Log.d(TAG, "Call OFFHOOK on SIM slot " + simSlot);
         }
-        if (TelephonyManager.EXTRA_STATE_IDLE.equals(state)) {
+
+        String prevState = LAST_STATE_BY_SLOT.get(simSlot);
+        LAST_STATE_BY_SLOT.put(simSlot, state);
+
+        if (TelephonyManager.EXTRA_STATE_IDLE.equals(state)
+                && (TelephonyManager.EXTRA_STATE_RINGING.equals(prevState)
+                || TelephonyManager.EXTRA_STATE_OFFHOOK.equals(prevState))) {
             Intent si = new Intent(context, GsmSipBridgeService.class);
             si.setAction("ACTION_CALL_ENDED");
             si.putExtra("sim_slot", simSlot);
             Log.d(TAG, "Call ended on SIM slot " + simSlot);
             context.startForegroundService(si);
+        } else if (TelephonyManager.EXTRA_STATE_IDLE.equals(state)) {
+            Log.d(TAG, "Ignoring IDLE without active previous state on SIM slot " + simSlot);
         }
     }
 
