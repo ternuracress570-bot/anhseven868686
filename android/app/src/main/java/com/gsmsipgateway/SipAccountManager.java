@@ -17,8 +17,6 @@ import org.linphone.core.TransportType;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Quản lý 2 tài khoản SIP cho Dual SIM
@@ -27,7 +25,6 @@ import java.util.regex.Pattern;
  */
 public class SipAccountManager {
     private static final String TAG = "SipAccountMgr";
-    private static final Pattern PHONE_LIKE_PATTERN = Pattern.compile("(\\+?\\d[\\d\\s().-]{7,})");
     
     public static final int ACCOUNT_SIM1 = 0; // SIP 1001
     public static final int ACCOUNT_SIM2 = 1; // SIP 1002
@@ -426,41 +423,12 @@ public class SipAccountManager {
         }
 
         for (String candidate : candidates) {
-            String normalized = normalizeVietnamPhone(candidate);
+            String normalized = VietnamPhoneNumberUtils.normalizeVietnamMobile(candidate);
             if (!normalized.isEmpty()) {
                 return normalized;
             }
         }
         return "";
-    }
-
-    private String normalizeVietnamPhone(String raw) {
-        if (raw == null) return "";
-        String input = raw.trim();
-        if (input.isEmpty()) return "";
-
-        Matcher m = PHONE_LIKE_PATTERN.matcher(input);
-        if (m.find()) {
-            input = m.group(1);
-        }
-
-        String clean = input.replaceAll("[^0-9+]", "");
-        if (clean.isEmpty()) return "";
-
-        if (clean.startsWith("+84") && clean.length() > 3) {
-            clean = "0" + clean.substring(3);
-        } else if (clean.startsWith("84") && clean.length() >= 11) {
-            clean = "0" + clean.substring(2);
-        }
-
-        if (!clean.startsWith("0") && clean.matches("[35789]\\d{8,9}")) {
-            clean = "0" + clean;
-        }
-
-        if (!clean.matches("0\\d{8,10}")) {
-            return "";
-        }
-        return clean;
     }
 
     /** Log codec đã negotiate tại thời điểm SDP */

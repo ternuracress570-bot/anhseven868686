@@ -26,6 +26,7 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     private static final String CH = "gsm_sip_bridge";
     private static final int RING_INTERVAL_MS = 5000;
     private static final int MAX_SIP_RETRIES = Integer.MAX_VALUE;
+    private static final int SIP_HEALTH_CHECK_INTERVAL_MS = 15000;
 
     private Core core;
     private SipAccountManager sipMgr;
@@ -41,6 +42,7 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     private final Runnable[] answerRunnables = new Runnable[2];
     private Runnable reRegisterRunnable;
     private Runnable iterateRunnable;
+    private Runnable healthCheckRunnable;
     private static final int CORE_ITERATE_INTERVAL_MS = 20;
 
     @Override
@@ -52,7 +54,7 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG + ":bridge");
             wakeLock.setReferenceCounted(false);
-            wakeLock.acquire(10 * 60 * 1000L);
+            wakeLock.acquire();
         }
 
         try {
@@ -85,10 +87,18 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
             answerRunnables[i] = () -> answerAndBridge(slot);
         }
         reRegisterRunnable = this::reloadAccounts;
+        healthCheckRunnable = new Runnable() {
+            @Override
+            public void run() {
+                runSipHealthCheck();
+                handler.postDelayed(this, SIP_HEALTH_CHECK_INTERVAL_MS);
+            }
+        };
 
         startForeground(1, note("Initializing..."));
         registerNetworkCallback();
         reloadAccounts();
+        handler.postDelayed(healthCheckRunnable, SIP_HEALTH_CHECK_INTERVAL_MS);
     }
 
     private void registerNetworkCallback() {
@@ -103,6 +113,12 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
                 Log.d(TAG, "Network available - scheduling SIP re-register");
                 handler.removeCallbacks(reRegisterRunnable);
                 handler.postDelayed(reRegisterRunnable, 2000);
+            }
+
+            @Override
+            public void onLost(Network network) {
+                Log.w(TAG, "Network lost - waiting for reconnect");
+                updateNote("Network lost - waiting reconnect...");
             }
         };
         try {
@@ -298,9 +314,9 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     @Override
     public void onIncomingCall(int simSlot, Call call, String dialedNumber) {
         Log.d(TAG, "Incoming SIP from Asterisk: slot=" + simSlot + " number=" + dialedNumber);
-        String normalizedNumber = normalizeVietnamPhone(dialedNumber);
+        String normalizedNumber = VietnamPhoneNumberUtils.normalizeVietnamMobile(dialedNumber);
         if (normalizedNumber.isEmpty()) {
-            Log.e(TAG, "onIncomingCall: no number, ignoring");
+            Log.e(TAG, "onIncomingCall: invalid or unsupported VN mobile number: " + dialedNumber);
             return;
         }
 
@@ -321,25 +337,19 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
         }
     }
 
-    private String normalizeVietnamPhone(String raw) {
-        if (raw == null) return "";
-        String clean = raw.trim().replaceAll("[^0-9+]", "");
-        if (clean.isEmpty()) return "";
+    private void runSipHealthCheck() {
+        if (sipMgr == null) return;
 
-        if (clean.startsWith("+84") && clean.length() > 3) {
-            clean = "0" + clean.substring(3);
-        } else if (clean.startsWith("84") && clean.length() >= 11) {
-            clean = "0" + clean.substring(2);
+        boolean sim1Registered = sipMgr.isAccountRegistered(SipAccountManager.ACCOUNT_SIM1);
+        boolean sim2Registered = sipMgr.isAccountRegistered(SipAccountManager.ACCOUNT_SIM2);
+        if (sim1Registered && sim2Registered) {
+            Log.v(TAG, "SIP health check: all accounts registered");
+            return;
         }
 
-        if (!clean.startsWith("0") && clean.matches("[35789]\\d{8,9}")) {
-            clean = "0" + clean;
-        }
-
-        if (!clean.matches("0\\d{8,10}")) {
-            return "";
-        }
-        return clean;
+        Log.w(TAG, "SIP health check: registration missing (sim1=" + sim1Registered + ", sim2=" + sim2Registered + "), re-registering");
+        updateNote("Reconnecting SIP...");
+        sipMgr.registerAll();
     }
 
     private void prepareAudio() {
@@ -393,6 +403,7 @@ public class GsmSipBridgeService extends Service implements SipAccountManager.Du
     public void onDestroy() {
         if (iterateRunnable != null) handler.removeCallbacks(iterateRunnable);
         handler.removeCallbacks(reRegisterRunnable);
+        if (healthCheckRunnable != null) handler.removeCallbacks(healthCheckRunnable);
         for (int i = 0; i < 2; i++) {
             handler.removeCallbacks(answerRunnables[i]);
             handler.removeCallbacks(bridgeRunnables[i]);
