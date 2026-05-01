@@ -25,6 +25,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      - name: Ensure Gradle wrapper jar
+        run: |
+          mkdir -p $GITHUB_WORKSPACE/android/gradle/wrapper
+          if [ ! -f $GITHUB_WORKSPACE/android/gradle/wrapper/gradle-wrapper.jar ]; then
+            curl -fsSL -o $GITHUB_WORKSPACE/android/gradle/wrapper/gradle-wrapper.jar \
+              https://raw.githubusercontent.com/gradle/gradle/v8.0.1/gradle/wrapper/gradle-wrapper.jar
+          fi
+
       - name: Build Release APK
         run: |
           cd $GITHUB_WORKSPACE/android
